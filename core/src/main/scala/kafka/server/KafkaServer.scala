@@ -31,6 +31,7 @@ import kafka.cluster.Broker
 import kafka.api.{ControlledShutdownResponse, ControlledShutdownRequest}
 import kafka.common.ErrorMapping
 import kafka.network.{Receive, BlockingChannel, SocketServer}
+import com.netflix.curator.x.zkclientbridge.CuratorZKClientBridge
 
 /**
  * Represents the lifecycle of a single Kafka broker. Handles all functionality required
@@ -108,9 +109,14 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime) extends Logg
     info("started")
   }
   
-  private def initZk(): ZkClient = {
-    info("Connecting to zookeeper on " + config.zkConnect)
-    val zkClient = new ZkClient(config.zkConnect, config.zkSessionTimeoutMs, config.zkConnectionTimeoutMs, ZKStringSerializer)
+  private def initZk(): ZkClient = {    
+    val zkClient = if (config.zkExhibitorServers.length > 0) {
+      info("Connecting to zookeeper on [exhibitor] " + config.zkExhibitorServers)
+      new ZkClient(new CuratorZKClientBridge(Curator.getCurator(config)))      
+    } else {
+      info("Connecting to zookeeper on " + config.zkConnect)
+      new ZkClient(config.zkConnect, config.zkSessionTimeoutMs, config.zkConnectionTimeoutMs, ZKStringSerializer)
+    }
     ZkUtils.setupCommonPaths(zkClient)
     zkClient
   }

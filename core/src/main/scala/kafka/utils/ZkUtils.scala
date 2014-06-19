@@ -37,6 +37,11 @@ import kafka.controller.LeaderIsrAndControllerEpoch
 import kafka.common.TopicAndPartition
 import kafka.utils.Utils.inLock
 import scala.collection
+import com.netflix.curator.ensemble.exhibitor.ExhibitorEnsembleProvider
+import com.netflix.curator.ensemble.exhibitor.Exhibitors
+import com.netflix.curator.ensemble.exhibitor.DefaultExhibitorRestClient
+import com.netflix.curator.retry.BoundedExponentialBackoffRetry
+import com.netflix.curator.framework.CuratorFrameworkFactory
 
 object ZkUtils extends Logging {
   val ConsumersPath = "/consumers"
@@ -795,4 +800,57 @@ class ZKConfig(props: VerifiableProperties) {
 
   /** how far a ZK follower can be behind a ZK leader */
   val zkSyncTimeMs = props.getInt("zookeeper.sync.time.ms", 2000)
+  
+  // additional exhibitor properties
+  val zkExhibitorServers = props.getString("x.zookeeper.exhibitor.servers", "").
+  	split(',').map(x => x.trim())
+  	
+  val zkExhibitorPort = props.getInt("x.zookeeper.exhibitor.port", 8080)
+  
+  val zkExhibitorPollingInterval = props.getInt("x.zookeeper.exhibitor.interval", 15000)
+  
+  val defaultZookeeperPort = props.getInt("x.default.zookeeper.port", 2181)
+  
+  val zkExhibitorRetryInterval = props.getInt("x.zookeeper.exhibitor.retry.interval", 1000)
+  
+  val zkExhibitorRetryTimes = props.getInt("x.zookeeper.exhibitor.retry.times", 5)
+  
+  val zkExhibitorIntervalCeiling = props.getInt("x.zookeeper.exhibitor.interval.ceiling", 30000)
+}
+
+object Curator {
+  
+  def getCurator(config: ZKConfig) = {
+    import collection.JavaConversions._
+    
+    val ensembleProvider = new ExhibitorEnsembleProvider(
+        new Exhibitors(config.zkExhibitorServers.toSeq, config.zkExhibitorPort, new Exhibitors.BackupConnectionStringProvider() {
+          def getBackupConnectionString(): String = {
+            config.zkExhibitorServers.map(x => "%s:%d".format(x, config.defaultZookeeperPort)).foldRight("")((x,y) => "%s,%s".format(x, y)) 
+          }
+        }),
+        new DefaultExhibitorRestClient(),
+        "/exhibitor/v1/cluster/list",
+        config.zkExhibitorPollingInterval,
+        new BoundedExponentialBackoffRetry(
+          config.zkExhibitorRetryInterval,
+          config.zkExhibitorRetryTimes,
+          config.zkExhibitorIntervalCeiling))        
+    
+    val builder = CuratorFrameworkFactory.builder().
+    	ensembleProvider(ensembleProvider).
+    	connectionTimeoutMs(config.zkConnectionTimeoutMs).
+    	sessionTimeoutMs(config.zkSessionTimeoutMs).
+    	retryPolicy(new BoundedExponentialBackoffRetry(
+          config.zkExhibitorRetryInterval,
+          config.zkExhibitorRetryTimes,
+          config.zkExhibitorIntervalCeiling))
+          
+    val fwk = builder.build()
+    
+    fwk.start()
+    
+    fwk
+  }
+  
 }
