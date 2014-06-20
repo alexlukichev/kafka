@@ -826,7 +826,7 @@ object Curator {
     val ensembleProvider = new ExhibitorEnsembleProvider(
         new Exhibitors(config.zkExhibitorServers.toSeq, config.zkExhibitorPort, new Exhibitors.BackupConnectionStringProvider() {
           def getBackupConnectionString(): String = {
-            config.zkExhibitorServers.map(x => "%s:%d".format(x, config.defaultZookeeperPort)).foldRight("")((x,y) => "%s,%s".format(x, y)) 
+            config.zkExhibitorServers.map(x => "%s:%d".format(x, config.defaultZookeeperPort)).mkString(",") 
           }
         }),
         new DefaultExhibitorRestClient(),
