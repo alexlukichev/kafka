@@ -803,11 +803,11 @@ class ZKConfig(props: VerifiableProperties) {
   
   // additional exhibitor properties
   val zkExhibitorServers = props.getString("x.zookeeper.exhibitor.servers", "").
-  	split(',').map(x => x.trim())
+  	split(',').map(_.trim()).filter(_.length() > 0)
   	
   val zkExhibitorPort = props.getInt("x.zookeeper.exhibitor.port", 8080)
   
-  val zkExhibitorPollingInterval = props.getInt("x.zookeeper.exhibitor.interval", 15000)
+  val zkExhibitorPollingInterval = props.getInt("x.zookeeper.exhibitor.interval", 1000)
   
   val defaultZookeeperPort = props.getInt("x.default.zookeeper.port", 2181)
   
@@ -835,7 +835,9 @@ object Curator {
         new BoundedExponentialBackoffRetry(
           config.zkExhibitorRetryInterval,
           config.zkExhibitorRetryTimes,
-          config.zkExhibitorIntervalCeiling))        
+          config.zkExhibitorIntervalCeiling))
+    
+    ensembleProvider.pollForInitialEnsemble() // we need this line to kick off the curator
     
     val builder = CuratorFrameworkFactory.builder().
     	ensembleProvider(ensembleProvider).
@@ -849,6 +851,8 @@ object Curator {
     val fwk = builder.build()
     
     fwk.start()
+    
+    fwk.checkExists().forPath("/foo") // another safe guard for curator initialization 
     
     fwk
   }

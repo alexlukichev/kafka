@@ -111,8 +111,8 @@ class KafkaServer(val config: KafkaConfig, time: Time = SystemTime) extends Logg
   
   private def initZk(): ZkClient = {    
     val zkClient = if (config.zkExhibitorServers.length > 0) {
-      info("Connecting to zookeeper on [exhibitor] " + config.zkExhibitorServers)
-      new ZkClient(new CuratorZKClientBridge(Curator.getCurator(config)))      
+      info("Connecting to zookeeper on [exhibitor] " + config.zkExhibitorServers.toSeq)
+      new ZkClient(new CuratorZKClientBridge(Curator.getCurator(config)), config.zkConnectionTimeoutMs)      
     } else {
       info("Connecting to zookeeper on " + config.zkConnect)
       new ZkClient(config.zkConnect, config.zkSessionTimeoutMs, config.zkConnectionTimeoutMs, ZKStringSerializer)
